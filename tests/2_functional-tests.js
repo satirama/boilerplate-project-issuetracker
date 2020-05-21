@@ -1,109 +1,111 @@
 /*
 *
 *
-*       FILL IN EACH FUNCTIONAL TEST BELOW COMPLETELY
-*       -----[Keep the tests in the same order!]-----
-*       (if additional are added, keep them at the very end!)
+*       Complete the API routing below
+*
+*
 */
 
-var chaiHttp = require('chai-http');
-var chai = require('chai');
-var assert = chai.assert;
-var server = require('../server');
+'use strict';
 
-chai.use(chaiHttp);
+var expect = require('chai').expect;
+var MongoClient = require('mongodb');
+var ObjectId = require('mongodb').ObjectID;
 
-suite('Functional Tests', function() {
+const CONNECTION_STRING = process.env.DB; //MongoClient.connect(CONNECTION_STRING, function(err, db) {});
+
+module.exports = function (app) {
+
+  app.route('/api/issues/:project')
   
-    suite('POST /api/issues/{project} => object with issue data', function() {
-      
-      test('Every field filled in', function(done) {
-       chai.request(server)
-        .post('/api/issues/test')
-        .send({
-          issue_title: 'Title',
-          issue_text: 'text',
-          created_by: 'Functional Test - Every field filled in',
-          assigned_to: 'Chai and Mocha',
-          status_text: 'In QA'
-        })
-        .end(function(err, res){
-          assert.equal(res.status, 200);
-          
-          //fill me in too!
-          
-          done();
+    .get(function (req, res){
+      var project = req.params.project;
+      var query = req.query;
+      //res.status(200).send(query)
+      MongoClient.connect(CONNECTION_STRING, function(err, db) {
+        db.collection(project).find(query, {}).toArray(function(err, result) {
+          res.status(200)
+            .send(result);
+        });  
+      });
+    })
+    
+    .post(function (req, res){
+      var project = req.params.project;
+      var body = req.body;
+      var query = {
+        issue_title: '',
+        issue_text: '',
+        assigned_to: '',
+        created_by: '',
+        status_text: '',
+        created_on: new Date(),
+        updated_on: '',
+        open: true
+      };
+    
+      Object.assign(query, body);
+      if (!query.issue_title || !query.issue_text || !query.created_by) {
+        res.status(400).type('text').send('missing some required value');
+      } else {
+        MongoClient.connect(CONNECTION_STRING, function(err, db) {
+          db.collection(project).insert(query, function(err, result) {
+            db.collection(project).findOne({_id: new ObjectId(result.insertedIds[0])},
+              (err, doc) => {
+                res.status(200)
+                  .send(doc);
+              });
+          });  
         });
-      });
-      
-      test('Required fields filled in', function(done) {
-        
-      });
-      
-      test('Missing required fields', function(done) {
-        
-      });
-      
-    });
+      }
     
-    suite('PUT /api/issues/{project} => text', function() {
-      
-      test('No body', function(done) {
-        
-      });
-      
-      test('One field to update', function(done) {
-        
-      });
-      
-      test('Multiple fields to update', function(done) {
-        
-      });
-      
-    });
+    })
     
-    suite('GET /api/issues/{project} => Array of objects with issue data', function() {
-      
-      test('No filter', function(done) {
-        chai.request(server)
-        .get('/api/issues/test')
-        .query({})
-        .end(function(err, res){
-          assert.equal(res.status, 200);
-          assert.isArray(res.body);
-          assert.property(res.body[0], 'issue_title');
-          assert.property(res.body[0], 'issue_text');
-          assert.property(res.body[0], 'created_on');
-          assert.property(res.body[0], 'updated_on');
-          assert.property(res.body[0], 'created_by');
-          assert.property(res.body[0], 'assigned_to');
-          assert.property(res.body[0], 'open');
-          assert.property(res.body[0], 'status_text');
-          assert.property(res.body[0], '_id');
-          done();
-        });
-      });
-      
-      test('One filter', function(done) {
-        
-      });
-      
-      test('Multiple filters (test for multiple fields you know will be in the db for a return)', function(done) {
-        
-      });
-      
-    });
-    
-    suite('DELETE /api/issues/{project} => text', function() {
-      
-      test('No _id', function(done) {
-        
-      });
-      
-      test('Valid _id', function(done) {
-        
-      });
-      
-    });
+    .put(function (req, res){
+      var project = req.params.project;
+      var body = req.body;
+      var updateQuery = {};
+      if (!body.issue_title && !body.issue_text && !body.assigned_to && !body.created_by && !body.status_text)
+          res.status(400).type('text').send('no updated field sent');
+      else {
+        Object.keys(body).forEach((key) => (!body[key] || key == '_id') && delete body[key]);
 
-});
+        body.updated_on = new Date();
+        var query = {
+          _id: new ObjectId(body._id)
+        }
+        var update = {
+          $set: body
+        }
+        MongoClient.connect(CONNECTION_STRING, function(err, db) {
+          db.collection(project).findOneAndUpdate(
+            query,
+            update,
+            (err, doc) => {
+              if (err) res.status(500).type('text').send('could not update ' + body._id);
+              res.status(200).type('text').send('successfully updated');
+          });
+        });
+      }
+    })
+    
+    .delete(function (req, res){
+      var project = req.params.project;
+      var body = req.body;
+      var query = {
+        _id: new ObjectId(body._id)
+      };
+      
+      //res.status(200).send(body._id)
+    
+      MongoClient.connect(CONNECTION_STRING, function(err, db) {
+        db.collection(project).removeOne(
+          query,
+          (err, doc) => {
+            if (err) res.status(500).type('text').send('could not delete ' + body._id);
+            res.status(200).type('text').send('deleted '+ body._id);
+        });
+      });
+    });
+    
+};
